@@ -1,46 +1,51 @@
-using TabularReinforcementLearning, DataStructures.PriorityQueue
+using Parameters, ReinforcementLearning, DataStructures.PriorityQueue
 
-struct EpisodicControl <: TabularReinforcementLearning.AbstractReinforcementLearner
-    γ::Float64
-    Q::Array{Float64, 2}
+@with_kw struct EpisodicControl 
+    ns::Int64 = 10
+    na::Int64 = 4
+    γ::Float64 = 1.
+    initvalue::Float64 = Inf64
+    Q::Array{Float64, 2} = zeros(na, ns) + initvalue
 end
-EpisodicControl(; ns = 10, na = 4, γ = 1., initvalue = Inf64) =
-    EpisodicLearner(EpisodicControl(γ, zeros(na, ns) + initvalue))
+import ReinforcementLearning.defaultbuffer
+function defaultbuffer(learner::EpisodicControl, env, preprocessor)
+    defaultbuffer(MonteCarlo(), env, preprocessor)
+end
 
-import TabularReinforcementLearning.update!, TabularReinforcementLearning.act
-function update!(::EpisodicLearner, learner::EpisodicControl, rewards, states, 
-                 actions, isterminal)
-    if isterminal
-        G = rewards[end]
-        for t in length(rewards)-1:-1:1
+import ReinforcementLearning.update!, ReinforcementLearning.selectaction
+function update!(learner::EpisodicControl, buffer)
+    actions = buffer.actions
+    rewards = buffer.rewards
+    states = buffer.states
+    if learner.Q[actions[end-1], states[end-1]] == Inf64
+        learner.Q[actions[end-1], states[end-1]] = -Inf64
+    end
+    if buffer.done[end]
+        G = 0.
+        for t in length(rewards):-1:1
             G = learner.γ * G + rewards[t]
-            if G > learner.Q[actions[t], states[t]] || 
-                    learner.Q[actions[t], states[t]] == Inf64
+            if G > learner.Q[actions[t], states[t]]
                 learner.Q[actions[t], states[t]] = G
             end
         end
-    else
-        if learner.Q[actions[end], states[end]] == Inf64
-            learner.Q[actions[end], states[end]] = -Inf64
-        end
     end
 end
-act(learner::EpisodicControl, policy, state) = act(policy, learner.Q[:, state])
+selectaction(learner::EpisodicControl, policy, state) = selectaction(policy, learner.Q[:, state])
 
-mutable struct ModelReset <: TabularReinforcementLearning.AbstractCallback 
-    counter::Int64
+@with_kw mutable struct ModelReset 
+    counter::Int64 = 0
 end
-ModelReset() = ModelReset(0)
-import TabularReinforcementLearning.callback!
-function callback!(c::ModelReset, learner::SmallBackups, p, r, a, s, isterminal)
+import ReinforcementLearning.callback!
+function callback!(c::ModelReset, rlsetup, state, action, reward, done)
     c.counter += 1
-    if isterminal
+    if rlsetup.buffer.done[end]
+        learner = rlsetup.learner
         learner.maxcount = c.counter
-        TabularReinforcementLearning.processqueue!(learner)
+        ReinforcementLearning.processqueue!(learner)
         learner.Nsa .= 0
         learner.Ns1a0s0 = [Dict{Tuple{Int64, Int64}, Int64}() for _ in
                            1:length(learner.Ns1a0s0)]
-        learner.queue = PriorityQueue(Int64[], Float64[], Base.Order.Reverse)
+        learner.queue = PriorityQueue(Base.Order.Reverse, zip(Int64[], Float64[]))
         c.counter = 0
         learner.maxcount = 0
     end

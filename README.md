@@ -3,14 +3,13 @@ Brea J (2017). [Is prioritized sweeping the better episodic control?](https://ar
 
 ## Dependencies
 * [Julia](https://julialang.org/downloads)
-* [TabularReinforcementLearning](https://github.com/jbrea/TabularReinforcementLearning.jl/)
+* [RLEnvDiscrete](https://github.com/JuliaReinforcementLearning/RLEnvDiscrete.jl/)
 
 ## Usage
 Run in a shell 
 
 ```shell
 cd src
-julia compare.jl
+julia -p4 compare.jl
 ```
 
-The results are saved to the 'DATADIR' directory defined in compare.jl.
